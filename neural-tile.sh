@@ -111,22 +111,23 @@ neural_style(){
         if groups $USER | grep &>/dev/null '\bdocker\b'; then SU=""
         else SU="sudo"; fi
 
-        outdir=$(mktemp -d)
         indir=$(mktemp -d)
+        outdir=${indir}/out
+        mkdir ${outdir}
 
         convert $1 -resize $NEURALSIZE $indir/$(basename $1)
         convert $2 -resize $NEURALSIZE $indir/$(basename $2)
 
         $SU nvidia-docker run --rm \
-          -v $indir:/images -v $outdir:/out albarji/style-swap \
-          --content /images/$(basename $1) \
-          --style /images/$(basename $2) \
+          -v $indir:/images albarji/style-swap \
+          --content $(basename $1) \
+          --style $(basename $2) \
           --save /out  \
           --maxContentSize $NEURALSIZE \
           --maxStyleSize $NEURALSIZE #\
           #--patchSize 7 --patchStride 3
         mv $outdir/*_stylized.* $3
-        rm -rf $indir $outdir
+        rm -rf $indir
 	fi
 	if [ ! -s $3 ] && [ $retry -lt 3 ] ;then
 			echo "Transfer Failed, Retrying for $retry time(s)"
@@ -141,8 +142,9 @@ retry=0
 neural_style_tiled(){
 	echo "Neural Style Transfering "$1
 	if [ ! -s $3 ]; then
-        outdir=$(mktemp -d)
         indir=$(mktemp -d)
+        outdir=${indir}/out
+        mkdir ${outdir}
 
         convert $1 -resize $NEURALSIZE $indir/$(basename $1)
         #stylesize=$(echo "$NEURALSIZE * 3" | bc)
@@ -151,8 +153,8 @@ neural_style_tiled(){
 
         $SU nvidia-docker run --rm \
           -v $indir:/images -v $outdir:/out albarji/style-swap \
-          --content /images/$(basename $1) \
-          --style /images/$(basename $2) \
+          --content $(basename $1) \
+          --style $(basename $2) \
           --save /out  \
           --maxContentSize $NEURALSIZE \
           --maxStyleSize $stylesize \
@@ -160,7 +162,7 @@ neural_style_tiled(){
           --tv 1e-6
           #--patchSize 7 --patchStride 3 \
         mv $outdir/*_stylized.* $3
-        rm -rf $indir $outdir
+        rm -rf $indir
 	fi
 	if [ ! -s $3 ] && [ $retry -lt 3 ] ;then
 			echo "Transfer Failed, Retrying for $retry time(s)"
