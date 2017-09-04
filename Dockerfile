@@ -25,33 +25,9 @@ RUN set -ex && \
 WORKDIR style-swap/models
 RUN bash download_models.sh
 
-# Add adain-style to path
-ENV PATH /style-swap:$PATH
-#ENV LUA_PATH /adain-style/?;$LUA_PATH
-RUN echo 'export LUA_PATH="/style-swap/?.lua;/style-swap/lib/?.lua;${LUA_PATH}"' >> ~/.bashrc
-#ENV LUA_CPATH /adain-style/?;$LUA_CPATH
-RUN echo 'export LUA_CPATH="/style-swap/?.lua;/style-swap/lib/?.lua;${LUA_CPATH}"' >> ~/.bashrc
-
 # Prepare folder as workplace for mounting images
-#WORKDIR /images
+RUN mkdir /images
+
 WORKDIR /style-swap
-
-#ENTRYPOINT ["th", "/adain-style/test.lua"]
-#ENTRYPOINT ["th", "test.lua"]
-ENTRYPOINT ["th", "/style-swap/style-swap.lua"]
-
-##############TODO: from neural-style
-
-# Declare volume for storing network weights
-#VOLUME ["/neural-style/models"]
-
-# Copy wrapper scripts
-#COPY ["/scripts/variants.sh", "/scripts/neural-style.sh", "/neural-style/"]
-
-# Prepare folder for mounting images and workplaces
-#WORKDIR /images
-#VOLUME ["/images"]
-
-#ENTRYPOINT ["neural-style.sh"]
-#CMD ["-backend", "cudnn", "-cudnn_autotune"]
-
+ADD entrypoint.sh /style-swap/entrypoint.sh
+ENTRYPOINT ["bash", "entrypoint.sh"]
