@@ -1,4 +1,4 @@
-FROM kaixhin/cuda-torch
+FROM nightseas/cuda-torch
 MAINTAINER "Álvaro Barbero Jiménez, https://github.com/albarji"
 
 # Install system dependencies
