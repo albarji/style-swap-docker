@@ -21,9 +21,12 @@ RUN set -ex && \
     mv style-swap-master style-swap && \
 	rm master.tar.gz
 
-# Download precomputed network weights
+# Download precomputed VGG network weights
 WORKDIR style-swap/models
 RUN bash download_models.sh
+
+# Add precomputed inverse network model
+ADD model/dec-tconv-sigmoid.t7 dec-tconv-sigmoid.t7
 
 # Prepare folder as workplace for mounting images
 RUN mkdir /images

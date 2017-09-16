@@ -25,5 +25,5 @@ while [ "$1" != "" ]; do
     shift
 done
 
-# Call main application with processed paremeters
-th /style-swap/style-swap.lua --save ${savefolder} ${procparams}
+# Call main application with processed parameters
+th /style-swap/style-swap.lua --save ${savefolder} --decoder /style-swap/models/dec-tconv-sigmoid.t7 ${procparams}
