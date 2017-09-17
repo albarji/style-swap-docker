@@ -1,8 +1,9 @@
 #! /bin/bash
 
-TILESIZE=512
+TILESIZE=400
 XTILES=3
 YTILES=3
+OVERLAP=50
 TILES=$(echo "$XTILES * $YTILES" | bc)
 
 # Check for output directory, and create it if missing
@@ -26,10 +27,6 @@ main(){
 	output="./output"
 	out_file=$output/$input_file
 	
-	#Defines the overlap
-	overlap_w=50
-	overlap_h=50
-	
 	# 2. Creates your original styled output. This step will be skipped if you place a previously styled image with the same name 
 	# as your specified "content image", located in your Neural-Style/output/<Styled_Image> directory.
 	if [ ! -s $out_file ] ; then
@@ -39,7 +36,7 @@ main(){
 	# 3. Chop the styled image into 3x3 tiles with the specified overlap value.
 	out_dir=$output/$clean_name
 	mkdir -p $out_dir
-	convert ${out_file} -crop "$XTILES"x"$YTILES"+"$overlap_w"+"$overlap_h"@ +repage +adjoin ${out_dir}/${clean_name}"_%d.png"
+	convert ${out_file} -crop "$XTILES"x"$YTILES"+"$OVERLAP"+"$OVERLAP"@ +repage +adjoin ${out_dir}/${clean_name}"_%d.png"
 	
 	#Finds out the length and width of the first tile as a reference point for resizing the other tiles.
 	original_tile_w=`convert $out_dir/$clean_name'_0.png' -format "%w" info:`
@@ -54,21 +51,24 @@ main(){
 	# 4. neural-style each tile
 	tiles_dir="$out_dir/tiles"
 	mkdir -p $tiles_dir
-	for tile in `ls ${out_dir} | grep "${clean_name}_[0-9]*.png"`
-	do
-		neural_style_tiled $out_dir/$tile $style $tiles_dir/$tile
-	done
+	neural_style_tiled ${out_dir} ${style} ${tiles_dir}
 	
 	#Perform the required mathematical operations:	
 
-	upres_tile_w=`convert $tiles_dir/$clean_name'_0.png' -format "%w" info:`
-	upres_tile_h=`convert $tiles_dir/$clean_name'_0.png' -format "%h" info:`
+	upres_tile_w=`convert ${tiles_dir}/$clean_name'_0.png' -format "%w" info:`
+	echo "upres_tile_w=${upres_tile_w}"
+	upres_tile_h=`convert ${tiles_dir}/$clean_name'_0.png' -format "%h" info:`
+	echo "upres_tile_h=${upres_tile_h}"
 	
 	tile_diff_w=`echo $upres_tile_w $original_tile_w | awk '{print $1/$2}'`
+	echo "tile_diff_w=${tile_diff_w}"
 	tile_diff_h=`echo $upres_tile_h $original_tile_h | awk '{print $1/$2}'`
+	echo "tile_diff_h=${tile_diff_h}"
 
-	smush_value_w=`echo $overlap_w $tile_diff_w | awk '{print $1*$2}'`
-	smush_value_h=`echo $overlap_h $tile_diff_h | awk '{print $1*$2}'`
+	smush_value_w=`echo $OVERLAP $tile_diff_w | awk '{print $1*$2}'`
+	echo "smush_value_w=${smush_value_w}"
+	smush_value_h=`echo $OVERLAP $tile_diff_h | awk '{print $1*$2}'`
+	echo "smush_value_h=${smush_value_h}"
 	
 	# 5. feather tiles
 	feathered_dir=$out_dir/feathered
@@ -155,37 +155,35 @@ neural_style(){
 }
 retry=0
 
-#Runs the tiles through Neural-Style with your chosen parameters. 
+# Runs a set of tiles through Neural-Style
 neural_style_tiled(){
-	echo "Neural Style Transfering "$1
-	if [ ! -s $3 ]; then
-        indir=$(mktemp -d)
-        outdir=${indir}/out
-        mkdir ${outdir}
+	echo "Neural Style Transfering tiles from directory "$1
+    indir=$(mktemp -d)
+    styledir=${indir}/style
+    mkdir ${styledir}
+    outdir=${indir}/out
+    mkdir ${outdir}
 
-        convert $1 -resize $TILESIZE $indir/$(basename $1)
-        #stylesize=$(echo "$TILESIZE * 3" | bc)
-        stylesize=$TILESIZE
-        convert $2 -resize $stylesize $indir/$(basename $2)
+    for tile in $(ls $1/*.png)
+    do
+        convert ${tile} -resize ${TILESIZE} ${indir}/$(basename ${tile})
+    done
+    stylesize=$TILESIZE
+    convert $2 -resize $stylesize $styledir/$(basename $2)
 
-        $SU nvidia-docker run --rm \
-          -v $indir:/images -v $outdir:/out albarji/style-swap \
-          --content $(basename $1) \
-          --style $(basename $2) \
-          --save /out  \
-          --maxContentSize $TILESIZE \
-          --maxStyleSize $stylesize \
-          --optimIter 20 \
-          --tv 1e-6
-        mv $outdir/*_stylized.* $3
-        rm -rf $indir
-	fi
-	if [ ! -s $3 ] && [ $retry -lt 3 ] ;then
-			echo "Transfer Failed, Retrying for $retry time(s)"
-			retry=`echo 1 $retry | awk '{print $1+$2}'`
-			neural_style_tiled $1 $2 $3
-	fi
-	retry=0
+    $SU nvidia-docker run --rm \
+      -v $indir:/images -v $outdir:/out albarji/style-swap \
+      --contentBatch . \
+      --style style/$(basename $2) \
+      --save /out  \
+      --maxContentSize $TILESIZE \
+      --maxStyleSize $stylesize \
+      --optimIter 20 \
+      --tv 1e-6
+    mv $outdir/*_stylized.* $3
+    # Rename images to remove the "_stylized" suffix the transfer algorithm adds
+    rename 's/_stylized//' $(ls $3/*.png)
+    rm -rf $indir
 }
 
 main $1 $2 $3

@@ -7,6 +7,7 @@ RUN set -ex && \
 	libprotobuf-dev \
 	protobuf-compiler \
 	wget \
+	imagemagick \
 	&& rm -rf /var/lib/apt/lists/*
 
 # Install loadcaffe and other torch dependencies
