@@ -1,10 +1,7 @@
 #! /bin/bash
 
 TILESIZE=400
-XTILES=3
-YTILES=3
 OVERLAP=50
-TILES=$(echo "$XTILES * $YTILES" | bc)
 
 # Check for output directory, and create it if missing
 if [ ! -d "$output" ]; then
@@ -16,7 +13,16 @@ main(){
 	input=$1
 	input_file=`basename $input`
 	clean_name="${input_file%.*}"
-	
+
+	# Gather size info from original image
+	original_w=`convert ${input} -format "%w" info:`
+	original_h=`convert ${input} -format "%h" info:`
+
+	# Compute number of tiles required to map all the image
+	XTILES=$(python -c "from math import ceil; print(ceil((${original_w}-$TILESIZE) / ($TILESIZE-$OVERLAP) + 1))")
+	YTILES=$(python -c "from math import ceil; print(ceil((${original_h}-$TILESIZE) / ($TILESIZE-$OVERLAP) + 1))")
+	TILES=$(echo "$XTILES * $YTILES" | bc)
+
 	#Defines the style image as a variable
 	style=$2
 	style_dir=`dirname $style`
@@ -30,7 +36,11 @@ main(){
 	# 2. Creates your original styled output. This step will be skipped if you place a previously styled image with the same name 
 	# as your specified "content image", located in your Neural-Style/output/<Styled_Image> directory.
 	if [ ! -s $out_file ] ; then
-		neural_style $input $style $out_file
+		neural_style ${input} ${style} ${out_file}
+        upscaled=$(mktemp XXXXXXXXXX)
+        convert ${out_file} -resize ${original_w} ${upscaled}
+		blend ${upscaled} ${input} ${out_file} 50  # TODO: this helps a bit, but does not solve the problem
+		rm -f ${upscaled}
 	fi
 	
 	# 3. Chop the styled image into 3x3 tiles with the specified overlap value.
@@ -82,10 +92,10 @@ main(){
 	# 6. Smush the feathered tiles together
 	i=0
 	command="-background transparent "
-	for row in $(seq ${XTILES})
+	for row in $(seq ${YTILES})
 	do
 	    rowcmd=""
-	    for col in $(seq ${YTILES})
+	    for col in $(seq ${XTILES})
 	    do
 	        rowcmd="$rowcmd $feathered_dir/${clean_name}_${i}.png"
 	        let i++
@@ -99,10 +109,10 @@ main(){
 	# 7. Smush the non-feathered tiles together
 	i=0
 	command=""
-	for row in $(seq ${XTILES})
+	for row in $(seq ${YTILES})
 	do
 	    rowcmd=""
-	    for col in $(seq ${YTILES})
+	    for col in $(seq ${XTILES})
 	    do
 	        rowcmd="$rowcmd ${tiles_dir}/${clean_name}_${i}.png"
 	        let i++
@@ -143,7 +153,7 @@ neural_style(){
           --save /out  \
           --maxContentSize $TILESIZE \
           --maxStyleSize $TILESIZE
-        mv $outdir/*_stylized.* $3
+        cp $outdir/*_stylized.* $3
         rm -rf $indir
 	fi
 	if [ ! -s $3 ] && [ $retry -lt 3 ] ;then
@@ -184,6 +194,15 @@ neural_style_tiled(){
     # Rename images to remove the "_stylized" suffix the transfer algorithm adds
     rename 's/_stylized//' $(ls $3/*.png)
     rm -rf $indir
+}
+
+blend(){
+    # Blends two images into one, with equal transparency
+    in1=$1
+    in2=$2
+    out=$3
+    weight=$4
+    convert -background transparent ${in1} ${in2} -compose blend -define compose:args=${weight} -composite ${out}
 }
 
 main $1 $2 $3

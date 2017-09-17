@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 
 # Generates an image incrementally, so as to produce multiscale resolution effects
-#
-# $1: content
-# $2: style
-# $3: output
+
+content=$1
+style=$2
+output=$3
 
 neural_style(){
 	echo "Neural Style Transfering "$1
@@ -25,18 +25,58 @@ neural_style(){
       --save /out  \
       --maxContentSize $4 \
       --maxStyleSize $4
-    mv $outdir/*_stylized.* $3
+    cp $outdir/*_stylized.* $3
     rm -rf $indir
 }
 
-#out2=$(mktemp XXXXXXXXXX.png)
-#neural_style $1 $2 ${out2} 64
-#out3=$(mktemp XXXXXXXXXX.png)
-#neural_style ${out2} $2 ${out3} 128
-out4=$(mktemp XXXXXXXXXX.png)
-#neural_style ${out3} $2 ${out4} 256
-neural_style $1 $2 ${out4} 256
-neural_style ${out4} $2 $3 512
+blend(){
+    # Blends two images into one, with equal transparency
+    in1=$1
+    in2=$2
+    out=$3
+    convert -background transparent ${in1} ${in2} -compose blend -define compose:args=50 -composite ${out}
+}
 
-# TODO: if we just reiterate the transformed image, quality will be poor. We need to somehow merge both the original
-# image and the one from the previous iteration
+multiresolution_step(){
+    # Performs a step in the multiresolution algorithm
+    content=$1      # Original content image
+    style=$2        # Style to apply
+    resolution=$3   # Desired output resolution after this step
+    previous=$4     # Result image of previous step
+    out=$5          # File in which to save result of this step
+
+    set -x  # FIXME
+    trap read debug  # FIXME
+
+    # Upscale result of previous step to current resolution
+    upscaled=$(mktemp XXXXXXXXXX)
+    convert ${previous} -resize ${resolution} ${upscaled}
+    # Downscale content image to current resolution
+    downscaled=$(mktemp XXXXXXXXXX)
+    convert ${content} -resize ${resolution} ${downscaled}
+    # Blend both images, to create a base for this step
+    blended=$(mktemp XXXXXXXXXX)
+    blend ${upscaled} ${downscaled} ${blended}
+    # Run neural style
+    neural_style ${blended} ${style} ${out} ${resolution}
+
+    # Delete temporaries
+    rm -f ${upscaled} ${downscaled} ${blended}
+}
+
+infile=$(mktemp XXXXXXXXXX)
+outfile=$(mktemp XXXXXXXXXX)
+
+set -x  # FIXME
+trap read debug  # FIXME
+
+neural_style ${content} ${style} ${infile} 32
+for resolution in 64 128 256
+do
+    multiresolution_step ${content} ${style} ${resolution} ${infile} ${outfile}
+    cp ${outfile} ${infile}
+done
+
+cp ${outfile} ${output}
+
+rm -f ${infile} ${outfile}
